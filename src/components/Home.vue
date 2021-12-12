@@ -3,7 +3,7 @@
     <video controls ref="videoPlayer" class="video-dispaly">
     <source :src="videoUrl" type="video/mp4">
     </video>
-    <div class="BaseRecorder">
+    <div v-loading="loading" class="BaseRecorder">
     <div class="BaseRecorder-record">
        <!-- <input type="file" @change="filechange($event)" accept="video/*"> -->
       <!-- <button @click="videoPlayOrStop()">{{playingTitle}}</button> -->
@@ -16,6 +16,8 @@
     </div>
     <div class="BaseRecorder-play">
       <el-button  @click="transcode()">音视频合成</el-button >
+      <el-button :disabled="isDisableClick" @click="transcodePlay()">预览</el-button >
+      <el-button :disabled="isDisableClick" @click="videoDownload">下载</el-button >
       <!-- <button @click="playRecorder()">录音播放</button> -->
       <!-- <button @click="pausePlayRecorder()">暂停录音播放</button> -->
       <!-- <button @click="resumePlayRecorder()">恢复录音播放</button> -->
@@ -29,8 +31,8 @@
       <!-- <button type="error" @click="destroyRecorder()">销毁录音</button> -->
     </div>
        <div class="BaseRecorder-wave">
-      <canvas ref="record"></canvas>
-      <canvas ref="play"></canvas>
+      <canvas v-if="isShowCanvas" ref="record"></canvas>
+      <!-- <canvas ref="play"></canvas> -->
     </div>
    </div>
   </div>
@@ -39,6 +41,7 @@
 <script>
 import Recorder from 'js-audio-recorder'
 import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+import { ElMessage } from 'element-plus'
 
 export default {
   name: 'home',
@@ -53,6 +56,9 @@ export default {
       videoUrl:"",
       recoderUrl:"",
       playing:false,
+      isShowCanvas:true,
+      isDisableClick:true,
+      loading:false,
       playingTitle:"视频播放"
     }
   },
@@ -69,6 +75,7 @@ export default {
       // const audio = 'my.mp3'
       this.ffmpeg.FS('writeFile', 'test.mp4', await fetchFile(this.videoUrl));
       this.ffmpeg.FS('writeFile', 'my.wav', await fetchFile(this.recoderUrl));
+      this.loading = true
       //音频格式转换
       await this.ffmpeg.run('-i','my.wav','my.mp3');
       //消除音频
@@ -80,6 +87,8 @@ export default {
       this.videoUrl = url
       console.log(this.videoUrl)
       this.$refs.videoPlayer.load()
+      this.loading = false
+      this.isDisableClick = false
       console.log(url)
     },
     //消除音频
@@ -149,14 +158,17 @@ export default {
     startRecorder() {
       this.$refs.videoPlayer.load()
       this.$refs.videoPlayer.muted = true
+      this.isDisableClick = true
       this.recorder.start().then(
         () => {
           this.$refs.videoPlayer.play()
           this.drawRecord()
+          this.isShowCanvas = true
         },
         error => {
           // 出错了
           console.log(`${error.name} : ${error.message}`)
+           ElMessage.error(`${error.message}`)
         }
       )
     },
@@ -180,6 +192,7 @@ export default {
       this.drawRecordId && cancelAnimationFrame(this.drawRecordId)
       this.drawRecordId = null
       this.getWAVData()
+      this.isShowCanvas = false
     },
     // 录音播放
     playRecorder() {
@@ -198,6 +211,22 @@ export default {
     // 停止录音播放
     stopPlayRecorder() {
       this.recorder.stopPlay()
+    },
+    //预览
+    transcodePlay(){
+      this.$refs.videoPlayer.muted = false
+      this.$refs.videoPlayer.play()
+
+    },
+    //下载
+    videoDownload(){
+      var a = document.createElement('a')
+      var url = this.videoUrl
+      a.href = url
+      a.download = "my-diy"
+      a.click()
+      // window.URL.revokeObjectURL(url)
+
     },
     // 销毁录音
     destroyRecorder() {
@@ -259,7 +288,7 @@ export default {
       this.drawWave({
         canvas: this.$refs.record,
         dataArray: this.recorder.getRecordAnalyseData(),
-        bgcolor: 'rgb(255, 128, 200)',
+        bgcolor: 'rgb(255, 255, 255)',
         lineWidth: 1,
         lineColor: 'rgb(0, 128, 255)'
       })
@@ -277,7 +306,7 @@ export default {
     drawWave({
       canvas,
       dataArray,
-      bgcolor = 'rgb(200, 200, 200)',
+      bgcolor = 'rgb(255, 255, 255)',
       lineWidth = 2,
       lineColor = 'rgb(0, 0, 0)'
     }) {
@@ -293,6 +322,7 @@ export default {
       // 填充背景色
       ctx.fillStyle = bgcolor
       ctx.fillRect(0, 0, canvas.width, canvas.height)
+      console.log(canvas)
 
       // 设定波形绘制颜色
       ctx.lineWidth = lineWidth
@@ -334,7 +364,7 @@ export default {
 
 .video-dispaly{
   width: 640px;
-  height: 480px;
+  height: 400px;
 }
 
 .operate-recorder{
