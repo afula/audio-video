@@ -322,7 +322,7 @@ export default {
       // 填充背景色
       ctx.fillStyle = bgcolor
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      console.log(canvas)
+      // console.log(canvas)
 
       // 设定波形绘制颜色
       ctx.lineWidth = lineWidth
