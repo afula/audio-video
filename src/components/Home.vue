@@ -75,6 +75,14 @@ export default {
       // const audio = 'my.mp3'
       this.ffmpeg.FS('writeFile', 'test.mp4', await fetchFile(this.videoUrl));
       this.ffmpeg.FS('writeFile', 'my.wav', await fetchFile(this.recoderUrl));
+      console.log(this.videoUrl)
+      console.log("音频url")
+      if(this.recoderUrl == "" || this.recoderUrl == null){
+        ElMessage.error("没有找到音频!")
+        return
+
+      }
+      console.log(this.recoderUrl)
       this.loading = true
       //音频格式转换
       await this.ffmpeg.run('-i','my.wav','my.mp3');
