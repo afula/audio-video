@@ -4,7 +4,7 @@
     <source :src="videoUrl" type="video/mp4">
     </video>
     <div v-loading="loading" class="BaseRecorder">
-    <div class="BaseRecorder-record">
+    <div class="BaseRecorder-record" v-show="recorderBottonsDisplay">
        <!-- <input type="file" @change="filechange($event)" accept="video/*"> -->
       <!-- <button @click="videoPlayOrStop()">{{playingTitle}}</button> -->
       <!-- <button @click="removeAudio()">消除音频</button> -->
@@ -12,10 +12,10 @@
       <el-button @click="pauseRecorder()" class="operate-recorder">暂停配音</el-button>
       <el-button  @click="resumeRecorder()" class="operate-recorder">继续配音</el-button>
       <el-button  @click="stopRecorder()" class="operate-recorder">结束配音</el-button>
+      <el-button  @click="transcode()">音视频合成</el-button >
       
     </div>
     <div class="BaseRecorder-play">
-      <el-button  @click="transcode()">音视频合成</el-button >
       <el-button :disabled="isDisableClick" @click="transcodePlay()">预览</el-button >
       <el-button :disabled="isDisableClick" @click="videoDownload">下载</el-button >
       <!-- <button @click="playRecorder()">录音播放</button> -->
@@ -56,6 +56,11 @@ export default {
       videoUrl:"",
       recoderUrl:"",
       playing:false,
+      videoDuration:0,
+      audioDuration:0,
+      recorderBottonsDisplay:true,
+      clickStartRecordButton:false,
+      clickStopRecordButton:false,
       isShowCanvas:true,
       isDisableClick:true,
       loading:false,
@@ -64,6 +69,14 @@ export default {
   },
   mounted() {
     this.videoUrl = this.$route.params.videoUrl
+    let audio = new Audio()
+    audio.src = this.videoUrl
+    audio.addEventListener('loadedmetadata', () => {
+                // 这是视频音频的播放时长
+    console.log("视频时长")
+    console.log(audio.duration)  // 得到这个音频的播放时长，单位是秒。
+    this.videoDuration = audio.duration
+            })
     console.log(this.$route.params)
     console.log(this.$route.params.videoUrl)
     this.init()
@@ -71,6 +84,14 @@ export default {
   methods: {
     //配音
     async  transcode() {
+       if(this.clickStartRecordButton == false){
+        ElMessage.warning("请先点击开始配音按钮！")
+        return
+      }
+
+       if(this.clickStopRecordButton == false){
+        this.stopRecorder()
+      }
       // const file = 'taylorswift.mp4'
       // const audio = 'my.mp3'
       this.ffmpeg.FS('writeFile', 'test.mp4', await fetchFile(this.videoUrl));
@@ -88,6 +109,25 @@ export default {
       await this.ffmpeg.run('-i','my.wav','my.mp3');
       //消除音频
       await this.ffmpeg.run('-i','test.mp4','-vcodec','copy','-an','no_audio_video.mp4');
+      //如果录音时长小于视频时长
+      if(this.audioDuration < this.videoDuration){
+        await this.ffmpeg.run('-ss','00:00:00','-i','no_audio_video.mp4','-t',this.audioDuration+'','-c','copy','cut.mp4')
+        //音视频合成
+        await this.ffmpeg.run('-y','-i','cut.mp4','-i','my.mp3','-vcodec','copy','-acodec','copy','get.mp4');
+        const data = this.ffmpeg.FS('readFile', 'get.mp4');
+        const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+        this.videoUrl = url
+        console.log(this.videoUrl)
+        this.$refs.videoPlayer.load()
+        this.loading = false
+        this.isDisableClick = false
+        this.$refs.videoPlayer.muted = false
+        this.$refs.videoPlayer.controls = true
+        this.recorderBottonsDisplay = false
+        console.log(url)
+        console.log("录音时长小于视频时长")
+        return
+      }
       //音视频合成
       await this.ffmpeg.run('-y','-i','no_audio_video.mp4','-i','my.mp3','-vcodec','copy','-acodec','copy','get.mp4');
       const data = this.ffmpeg.FS('readFile', 'get.mp4');
@@ -97,9 +137,13 @@ export default {
       this.$refs.videoPlayer.load()
       this.loading = false
       this.isDisableClick = false
+      this.$refs.videoPlayer.muted = false
+      this.$refs.videoPlayer.controls = true
+      this.recorderBottonsDisplay = false
       console.log(url)
     },
     //消除音频
+    //暂未使用到
     async removeAudio(){
       this.ffmpeg.FS('writeFile', 'test.mp4', await fetchFile(this.videoUrl));
       //消除音频
@@ -164,8 +208,10 @@ export default {
     },
     // 开始录音
     startRecorder() {
+      this.clickStartRecordButton = true
       this.$refs.videoPlayer.load()
       this.$refs.videoPlayer.muted = true
+      this.$refs.videoPlayer.controls = false
       this.isDisableClick = true
       this.recorder.start().then(
         () => {
@@ -182,12 +228,21 @@ export default {
     },
     // 继续录音
     resumeRecorder() {
+      if(this.clickStartRecordButton == false){
+        ElMessage.warning("请先点击开始配音按钮！")
+        return
+      }
       this.$refs.videoPlayer.play()
       this.recorder.resume()
       this.drawRecord()
     },
     // 暂停录音
     pauseRecorder() {
+       if(this.clickStartRecordButton == false){
+        ElMessage.warning("请先点击开始配音按钮！")
+        return
+      }
+      this.clickStopRecordButton = true
       this.recorder.pause()
       this.$refs.videoPlayer.pause()
       this.drawRecordId && cancelAnimationFrame(this.drawRecordId)
@@ -195,6 +250,10 @@ export default {
     },
     // 结束录音
     stopRecorder() {
+       if(this.clickStartRecordButton == false){
+        ElMessage.warning("请先点击开始配音按钮！")
+        return
+      }
       this.recorder.stop()
       this.$refs.videoPlayer.pause()
       this.drawRecordId && cancelAnimationFrame(this.drawRecordId)
@@ -268,8 +327,17 @@ export default {
       // 获取录音WAV数据
     getWAVData(){
       var Blob = this.recorder.getWAVBlob()
+      console.log("获取录音wav数据")
       console.log(Blob)
       this.recoderUrl = URL.createObjectURL(Blob);
+      let audio = new Audio()
+      audio.src = this.recoderUrl
+      audio.addEventListener('loadedmetadata', () => {
+      // 这是视频音频的播放时长
+      console.log("音频时长")
+      console.log(audio.duration)  // 得到这个音频的播放时长，单位是秒。
+      this.audioDuration = audio.duration
+              })
       console.log(this.recoderUrl)
 
     },
